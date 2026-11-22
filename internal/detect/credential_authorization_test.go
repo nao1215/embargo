@@ -51,12 +51,15 @@ func TestQuotedAuthorizationExactSpans(t *testing.T) {
 	for _, scheme := range []string{bearerSchemeFixture, "bEaReR", basicSchemeFixture, "basic"} {
 		for _, space := range []string{" ", "   "} {
 			for _, quote := range []string{"\"", "'"} {
-				for _, secret := range []string{"x", "opaqueHeaderFixture"} {
-					before := "header=" + quote + scheme + space
-					input := before + secret + quote + " public=kept"
-					got := (&Credential{}).Scan([]byte(input))
-					if len(got) != 1 || got[0].Start != len(before) || got[0].End != len(before)+len(secret) || input[got[0].Start:got[0].End] != secret {
-						t.Fatalf("quoted authorization boundary: %q: %+v", input, got)
+				// A quote at the first byte, with no label before it, still opens the value.
+				for _, label := range []string{"header=", ""} {
+					for _, secret := range []string{"x", "opaqueHeaderFixture"} {
+						before := label + quote + scheme + space
+						input := before + secret + quote + " public=kept"
+						got := (&Credential{}).Scan([]byte(input))
+						if len(got) != 1 || got[0].Start != len(before) || got[0].End != len(before)+len(secret) || input[got[0].Start:got[0].End] != secret {
+							t.Fatalf("quoted authorization boundary: %q: %+v", input, got)
+						}
 					}
 				}
 			}

@@ -294,3 +294,26 @@ func TestExpiryRejectsNonDigitYear(t *testing.T) {
 		t.Fatal("invalid year accepted")
 	}
 }
+
+func TestOverlapsReportedDateEdges(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		used       map[int]int
+		name       string
+		start, end int
+		want       bool
+	}{
+		{map[int]int{4: 11}, "date starting earlier reaches into the range", 10, 12, true},
+		{map[int]int{10: 15}, "date starting at the range start", 10, 12, true},
+		{map[int]int{4: 10}, "date ending at the range start only touches it", 10, 12, false},
+		{map[int]int{12: 15}, "date starting at the range end only touches it", 10, 12, false},
+		{map[int]int{}, "no reported dates", 10, 12, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := overlapsReportedDate(tc.used, tc.start, tc.end); got != tc.want {
+				t.Errorf("overlapsReportedDate(%v, %d, %d) = %v, want %v", tc.used, tc.start, tc.end, got, tc.want)
+			}
+		})
+	}
+}
