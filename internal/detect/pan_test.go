@@ -645,6 +645,7 @@ func TestPANTwoCardsOrACardAndANumber(t *testing.T) {
 		"4111111111111111 12":                  "[0,16)",
 		"4111 1111 1111 1111 2026":             "[0,19)",
 		"1234567890123 4111111111111111":       "[14,30)",
+		"6200000000000000000 5":                "[0,19)",
 	} {
 		found := d.Scan([]byte(input))
 		spans := make([]string, 0, len(found))

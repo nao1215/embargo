@@ -491,7 +491,13 @@ func TestIPv6ShapedKeepsEveryParsableRun(t *testing.T) {
 			t.Fatalf("ipv6Shaped(%q) = false, but %v parses", run, ip)
 		}
 	}
-	for _, run := range []string{"12:34:56", "a:b", "1:2:3:4:5", "level:info"} {
+	// Only trailing colons and dots leave nothing before them, which may still end an IPv4 address.
+	for _, run := range []string{":.:", "..::."} {
+		if !ipv6Shaped([]byte(run)) {
+			t.Errorf("ipv6Shaped(%q) = false; a run of only trailing colons and dots is kept", run)
+		}
+	}
+	for _, run := range []string{"12:34:56", "a:b", "1:2:3:4:5", "level:info", ":1:2"} {
 		if ipv6Shaped([]byte(run)) {
 			t.Errorf("ipv6Shaped(%q) = true; the address parser must not see it", run)
 		}

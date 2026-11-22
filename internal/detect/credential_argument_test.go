@@ -25,6 +25,7 @@ func TestCredentialQuotedArgumentsAndSubscripts(t *testing.T) {
 		`env[""] = "x"`:                                         "",
 		`f("password", "unterminated`:                           "unterminated",
 		`f("unterminated`:                                       "",
+		`"note", Map.of("password", "first-quote")`:             "first-quote",
 	} {
 		got := make([]string, 0, 1)
 		for _, f := range d.Scan([]byte(input)) {
