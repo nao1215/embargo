@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -40,10 +42,11 @@ func (e statusError) Error() string {
 // line as the filter does, and returns its status. A command ended by a
 // signal reports 128 plus the signal, as a shell does.
 //
-// SIGTERM and SIGHUP sent to embargo are passed on and embargo goes on masking
-// until the command ends. An interrupt from the terminal already reaches the
-// command, which runs in the same process group, so embargo only stays alive
-// for the output that follows it.
+// The signals in caughtSignals that reach embargo are passed on, and embargo
+// goes on masking until the command ends. Ctrl-C and Ctrl-\ typed at the
+// terminal whose foreground group embargo is in already reach the command,
+// which runs in the same group, so those are not passed on a second time;
+// without such a terminal, as in a container, they are passed on too.
 func runCommand(argv []string, scanner *embargo.Scanner, input io.Reader, output, diagnostics io.Writer) error {
 	// #nosec G204 -- The user names the command to run on the command line.
 	command := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
@@ -52,29 +55,40 @@ func runCommand(argv []string, scanner *embargo.Scanner, input io.Reader, output
 	if err != nil {
 		return err
 	}
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	caught := caughtSignals()
+	signals := make(chan os.Signal, len(caught))
+	signal.Notify(signals, caught...)
+	terminal := openTerminal()
 	defer func() {
 		signal.Stop(signals)
 		close(signals)
+		// A terminal that was never opened is nil, and closing it only returns an error.
+		_ = terminal.Close() //nolint:errcheck // The terminal was only asked for its foreground group.
 	}()
 	if err := command.Start(); err != nil {
 		streams.close()
 		return startFailure(err)
 	}
 	streams.closeChildEnds()
-	go relaySignals(command.Process, signals)
+	go relaySignals(command.Process, signals, func() bool { return inForeground(terminal) })
 	failures := streams.mask(scanner, output, diagnostics)
 	return commandStatus(command.Wait(), failures)
 }
 
-// relaySignals passes SIGTERM and SIGHUP on to the command; an interrupt is
-// only kept from ending embargo.
-func relaySignals(process *os.Process, signals <-chan os.Signal) {
+// signalTarget receives the signals passed on: the command's process.
+type signalTarget interface {
+	Signal(sig os.Signal) error
+}
+
+// relaySignals passes each signal on to the command, except a terminal
+// signal while fromTerminal reports that the terminal sent it to the command
+// as well; that one only keeps embargo from ending.
+func relaySignals(process signalTarget, signals <-chan os.Signal, fromTerminal func() bool) {
 	for received := range signals {
-		if received != os.Interrupt {
-			_ = process.Signal(received) //nolint:errcheck // A command that has already ended needs no signal.
+		if terminalSignal(received) && fromTerminal() {
+			continue
 		}
+		_ = process.Signal(received) //nolint:errcheck // A command that has already ended needs no signal.
 	}
 }
 
@@ -157,6 +171,21 @@ func (p *commandPipes) close() {
 	}
 }
 
+// filterCommandOutput masks one stream of the command as filterLines does,
+// except that a line over the limit is replaced with a notice naming only its
+// number and the stream goes on, so the command is not ended by a closed pipe
+// because of one long line. The first withheld line is returned at the end.
+func filterCommandOutput(input io.Reader, output io.Writer, lines *lineScanner) error {
+	writer := bufio.NewWriterSize(output, ioBuffer)
+	masked := &pipeline{base: lines, render: renderMasked, consequence: outputStops, withhold: true, lines: 0, size: 0}
+	var withheld error
+	err := masked.run(input, func(b *batch) error {
+		withheld = cmp.Or(withheld, b.withheld)
+		return writeBatch(writer, b)
+	})
+	return cmp.Or(err, withheld)
+}
+
 // mask filters both streams at once and returns their failures. A stream
 // that stops early is closed, so the command gets a broken pipe instead of
 // blocking on a pipe nobody reads.
@@ -165,7 +194,7 @@ func (p *commandPipes) mask(scanner *embargo.Scanner, output, diagnostics io.Wri
 	var group sync.WaitGroup
 	for i, destination := range []io.Writer{output, diagnostics} {
 		group.Go(func() {
-			failures[i] = filterLines(p.read[i], destination, newLineScanner(scanner, inputLines))
+			failures[i] = filterCommandOutput(p.read[i], destination, newLineScanner(scanner, inputLines))
 			_ = p.read[i].Close() //nolint:errcheck // The stream was read to its end or abandoned.
 		})
 	}

@@ -48,7 +48,7 @@ func writeReport(input io.Reader, output io.Writer, scanned *lineScanner, sample
 
 func collectReport(input io.Reader, scanned *lineScanner, sampleLimit int) (report, error) {
 	groups := make(map[embargo.Kind]*kindReport)
-	counted := &pipeline{base: scanned, render: renderFindings, consequence: "no report is written", lines: 0, size: 0}
+	counted := &pipeline{base: scanned, render: renderFindings, consequence: "no report is written", withhold: false, lines: 0, size: 0}
 	err := counted.run(input, func(b *batch) error {
 		for _, at := range b.found {
 			addFinding(groups, at.finding, at.offset, at.line, sampleLimit)
@@ -85,7 +85,7 @@ type foundValue struct {
 // filter. A read failure stops before that line, after the earlier findings.
 func writeFindings(input io.Reader, output io.Writer, scanned *lineScanner) error {
 	writer := bufio.NewWriterSize(output, ioBuffer)
-	listed := &pipeline{base: scanned, render: renderFoundValues, consequence: "output stops before it", lines: 0, size: 0}
+	listed := &pipeline{base: scanned, render: renderFoundValues, consequence: outputStops, withhold: false, lines: 0, size: 0}
 	return listed.run(input, func(b *batch) error { return writeBatch(writer, b) })
 }
 

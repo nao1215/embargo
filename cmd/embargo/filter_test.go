@@ -19,6 +19,9 @@ const (
 	filterMarker   = "[REDACTED]"
 )
 
+// readFailedAtLine2 is the message for a read that fails on the second line.
+const readFailedAtLine2 = "embargo: input read failed at line 2; " + outputStops
+
 func TestFilterMasksTextAndJSONLinesAndKeepsEndings(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -88,7 +91,7 @@ func TestFilterStopsBeforeOverlongLineAndReadFailure(t *testing.T) {
 	out.Reset()
 	failing := io.MultiReader(strings.NewReader("card="+filterPAN+"\n"), &failingInput{})
 	err = run(nil, failing, &out, io.Discard)
-	if err == nil || err.Error() != "embargo: input read failed at line 2; output stops before it" || strings.Contains(out.String(), filterPAN) {
+	if err == nil || err.Error() != readFailedAtLine2 || strings.Contains(out.String(), filterPAN) {
 		t.Fatalf("read failure: err=%v output=%q", err, out.String())
 	}
 }

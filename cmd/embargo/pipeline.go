@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"errors"
+	"fmt"
 	"io"
 	"runtime"
 
@@ -23,8 +25,10 @@ const (
 type batch struct {
 	end     *lineScanner
 	failure error
-	done    chan struct{}
-	data    []byte
+	// withheld reports the first line of the batch that was withheld.
+	withheld error
+	done     chan struct{}
+	data     []byte
 	// ends holds where each line, with its ending, stops in data.
 	ends   []int
 	out    []byte
@@ -54,6 +58,9 @@ type pipeline struct {
 	base        *lineScanner
 	render      lineRenderer
 	consequence string
+	// withhold replaces a line over the limit with a notice and goes on
+	// reading, instead of ending the input before it.
+	withhold bool
 	// lines and size count the non-empty lines and bytes read.
 	lines int
 	size  int64
@@ -121,6 +128,10 @@ func (p *pipeline) fill(reader *bufio.Reader, b *batch) bool {
 	done := false
 	for !done && len(b.data) < batchBytes {
 		line, tooLong, readErr := readLine(reader)
+		if tooLong && p.withhold {
+			line, readErr = withholdLine(reader, b, readErr)
+			tooLong = false
+		}
 		if b.failure = readFailure(tooLong, readErr, b.first+len(b.ends), p.consequence); b.failure != nil {
 			break
 		}
@@ -147,6 +158,22 @@ func (p *pipeline) header(b *batch) {
 		body, _ := splitEnding(b.data)
 		p.base.table.findings(bytes.TrimPrefix(body, []byte(utf8BOM)))
 	}
+}
+
+// withholdLine skips what is left of a line over the limit and returns the
+// notice that takes its place, recording the first such line of b. readErr
+// is how readLine stopped; a failure while skipping is returned with no
+// notice, so the input ends before the line as it would without withholding.
+func withholdLine(reader *bufio.Reader, b *batch, readErr error) ([]byte, error) {
+	for errors.Is(readErr, bufio.ErrBufferFull) {
+		_, readErr = reader.ReadSlice('\n')
+	}
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return nil, readErr
+	}
+	notice := fmt.Errorf("embargo: line %d exceeds the 4 MiB limit and was withheld", b.first+len(b.ends))
+	b.withheld = cmp.Or(b.withheld, notice)
+	return []byte(notice.Error() + "\n"), readErr
 }
 
 func send(channel chan<- *batch, b *batch, quit <-chan struct{}) bool {

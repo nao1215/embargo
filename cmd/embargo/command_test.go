@@ -11,7 +11,10 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"testing/iotest"
 	"time"
+
+	"github.com/nao1215/embargo"
 )
 
 // childArgument makes the test binary act as the command that run starts,
@@ -37,6 +40,9 @@ func child(mode string) int {
 		return 0
 	case "long":
 		_, _ = os.Stdout.WriteString(strings.Repeat("x", maximumLine+1) + "\n") //nolint:errcheck // The test reads what arrived.
+		if _, err := os.Stdout.WriteString("after " + filterEmail + "\n"); err != nil {
+			return 4
+		}
 		return 0
 	case "term":
 		process, _ := os.FindProcess(os.Getpid()) //nolint:errcheck // The own process is always found.
@@ -45,6 +51,9 @@ func child(mode string) int {
 	case "wait":
 		return waitForSignal()
 	default:
+		if code, ok := platformChild(mode); ok {
+			return code
+		}
 		return 0
 	}
 }
@@ -80,10 +89,13 @@ func TestRunMasksBothStreamsAndKeepsTheStatus(t *testing.T) {
 	}
 }
 
-func TestRunReportsAMaskingFailureAfterASuccessfulCommand(t *testing.T) {
+func TestRunWithholdsAnOverLongLineAndKeepsTheCommandRunning(t *testing.T) {
 	t.Parallel()
+	// The command writes after its over-long line and fails with 4 when that
+	// write is refused, so a command ended by a closed pipe cannot pass.
 	code, stdout, stderr := runChild(t, "", "long")
-	if code != statusFailed || stdout != "" || stderr != "embargo: line 1 exceeds the 4 MiB limit; output stops before it\n" {
+	const notice = "embargo: line 1 exceeds the 4 MiB limit and was withheld\n"
+	if code != statusFailed || stdout != notice+"after "+filterMarker+"\n" || stderr != notice {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
@@ -98,7 +110,7 @@ func TestRunReportsASignalAsAShellDoes(t *testing.T) {
 	}
 }
 
-func TestRelaySignalsPassesTermButNotInterrupt(t *testing.T) {
+func TestRelaySignalsPassesTermButNotATerminalInterrupt(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows has no signals")
@@ -112,7 +124,7 @@ func TestRelaySignalsPassesTermButNotInterrupt(t *testing.T) {
 	signals <- os.Interrupt
 	signals <- syscall.SIGTERM
 	close(signals)
-	relaySignals(waiting.Process, signals)
+	relaySignals(waiting.Process, signals, func() bool { return true })
 	exit, ok := errors.AsType[*exec.ExitError](waiting.Wait())
 	if !ok {
 		t.Fatal("the child was not ended by a signal")
@@ -198,3 +210,68 @@ func TestClosedOutputEndsQuietly(t *testing.T) {
 type closedOutput struct{}
 
 func (closedOutput) Write([]byte) (int, error) { return 0, syscall.EPIPE }
+
+func TestWithheldLinesKeepTheStreamGoing(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("x", maximumLine+1)
+	limit := strings.Repeat("y", maximumLine-1) + "\n"
+	for _, tc := range []struct {
+		name, input, output, failure string
+	}{
+		{
+			name:    "a line over the limit becomes a notice and the next line is masked",
+			input:   "one " + filterEmail + "\n" + long + "\ntwo " + filterEmail + "\n",
+			output:  "one " + filterMarker + "\nembargo: line 2 exceeds the 4 MiB limit and was withheld\ntwo " + filterMarker + "\n",
+			failure: "embargo: line 2 exceeds the 4 MiB limit and was withheld",
+		},
+		{
+			name:    "only the first withheld line is reported at the end",
+			input:   long + "\n" + long + "\nlast\n",
+			output:  "embargo: line 1 exceeds the 4 MiB limit and was withheld\nembargo: line 2 exceeds the 4 MiB limit and was withheld\nlast\n",
+			failure: "embargo: line 1 exceeds the 4 MiB limit and was withheld",
+		},
+		{
+			name:    "an unterminated over-long last line ends the stream with its notice",
+			input:   "one\n" + long,
+			output:  "one\nembargo: line 2 exceeds the 4 MiB limit and was withheld\n",
+			failure: "embargo: line 2 exceeds the 4 MiB limit and was withheld",
+		},
+		{
+			name:    "a line that runs a whole read buffer past the limit is skipped to its newline",
+			input:   strings.Repeat("z", maximumLine+2*readBuffer) + "\nnext " + filterEmail + "\n",
+			output:  "embargo: line 1 exceeds the 4 MiB limit and was withheld\nnext " + filterMarker + "\n",
+			failure: "embargo: line 1 exceeds the 4 MiB limit and was withheld",
+		},
+		{
+			name:   "a line of exactly 4 MiB with its newline is kept",
+			input:  limit + "end\n",
+			output: limit + "end\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			err := filterCommandOutput(strings.NewReader(tc.input), &out, newLineScanner(embargo.NewScanner(), inputLines))
+			got := ""
+			if err != nil {
+				got = err.Error()
+			}
+			if got != tc.failure {
+				t.Fatalf("failure = %q, want %q", got, tc.failure)
+			}
+			if out.String() != tc.output {
+				t.Fatalf("output (%d bytes) = %.200q, want %.200q", out.Len(), out.String(), tc.output)
+			}
+		})
+	}
+}
+
+func TestWithheldLineReadFailureStopsTheStream(t *testing.T) {
+	t.Parallel()
+	input := io.MultiReader(strings.NewReader("one\n"+strings.Repeat("x", maximumLine+1)), iotest.ErrReader(errors.New("private-error")))
+	var out bytes.Buffer
+	err := filterCommandOutput(input, &out, newLineScanner(embargo.NewScanner(), inputLines))
+	if err == nil || err.Error() != readFailedAtLine2 || out.String() != "one\n" {
+		t.Fatalf("err=%v output=%.100q", err, out.String())
+	}
+}

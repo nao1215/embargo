@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `embargo run` no longer ends the command with a broken pipe when it prints a line over 4 MiB: the line is replaced with a notice that names only its number and the command keeps running.
+- `embargo run` passes SIGUSR1 and SIGUSR2 on to the command, and SIGINT and SIGQUIT as well when no terminal sent them to the command already, as when a container runtime stops it; SIGQUIT no longer ends embargo with a goroutine dump.
+
 ## [0.20.1] - 2026-11-20
 
 ### Changed

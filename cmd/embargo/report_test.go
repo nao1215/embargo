@@ -122,7 +122,7 @@ func TestJSONLStopsAtFailuresAfterEarlierFindings(t *testing.T) {
 	var out bytes.Buffer
 	failing := io.MultiReader(strings.NewReader("card=4111111111111111\n"), &failingInput{})
 	err := run([]string{flagFormat, formatJSONL}, failing, &out, io.Discard)
-	if err == nil || err.Error() != "embargo: input read failed at line 2; output stops before it" || !strings.Contains(out.String(), `"line":1`) {
+	if err == nil || err.Error() != readFailedAtLine2 || !strings.Contains(out.String(), `"line":1`) {
 		t.Fatalf("read failure: err=%v output=%q", err, out.String())
 	}
 	if run([]string{flagFormat, formatJSONL}, strings.NewReader("card=4111111111111111\n"), failingOutput{}, io.Discard) == nil {

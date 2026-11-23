@@ -41,7 +41,7 @@ embargo run sh app.sh >> app.log
 embargo --kinds all run sh app.sh
 ```
 
-A command ended by a signal exits with 128 plus the signal number, as in a shell. SIGTERM and SIGHUP sent to embargo are passed on, and Ctrl-C reaches the command from the terminal. A child process that keeps the output open after the command exits keeps embargo running, as it would keep a shell pipe open.
+A command ended by a signal exits with 128 plus the signal number, as in a shell. SIGTERM, SIGHUP, SIGUSR1 and SIGUSR2 sent to embargo are passed on. Ctrl-C and Ctrl-\ typed at the terminal reach the command directly and are not passed on a second time; without a terminal, as in a container or under a service manager, SIGINT and SIGQUIT are passed on too. As PID 1 in a container embargo does not reap orphaned processes, so use the runtime's init, such as `docker run --init` or ECS `initProcessEnabled`, for a command that leaves children behind. A line over 4 MiB from the command is replaced with `embargo: line N exceeds the 4 MiB limit and was withheld` on its stream and the command keeps running; the same message is printed when it ends, and a successful command then exits with 1. A child process that keeps the output open after the command exits keeps embargo running, as it would keep a shell pipe open.
 
 ## Count findings
 

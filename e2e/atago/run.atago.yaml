@@ -98,7 +98,7 @@ scenarios:
               out.txt:0
               err.txt:0
 
-  - name: an over-long line from the command is reported after it ends
+  - name: an over-long line from the command is withheld and the command keeps running
     steps:
       - fixture:
           file: long.sh
@@ -106,6 +106,7 @@ scenarios:
             echo first alice@example.com
             head -c 4194304 /dev/zero | tr '\000' a
             echo
+            echo after alice@example.com || exit 9
             exit "$1"
       - run:
           command: embargo run sh long.sh 0
@@ -114,15 +115,18 @@ scenarios:
           stdout:
             equals: |
               first [REDACTED]
+              embargo: line 2 exceeds the 4 MiB limit and was withheld
+              after [REDACTED]
           stderr:
             equals: |
-              embargo: line 2 exceeds the 4 MiB limit; output stops before it
+              embargo: line 2 exceeds the 4 MiB limit and was withheld
       - run:
           command: embargo run sh long.sh 3
       - assert:
-          exit_code: {in: [3, 141]}
+          exit_code: 3
           stderr:
-            contains: "embargo: line 2 exceeds the 4 MiB limit"
+            equals: |
+              embargo: line 2 exceeds the 4 MiB limit and was withheld
 
   - name: commands that cannot start get 126 and 127
     steps:
@@ -196,6 +200,41 @@ scenarios:
           file:
             path: out.txt
             equals: "started\nstopping [REDACTED]\n"
+
+  - name: without a terminal SIG${signal} sent to embargo reaches the command, as a container runtime sends it
+    skip:
+      os: windows
+    matrix:
+      - signal: INT
+      - signal: QUIT
+      - signal: USR1
+      - signal: USR2
+    steps:
+      - fixture:
+          file: app.sh
+          content: |
+            trap 'echo "got $1 alice@example.com"; exit 0' "$1"
+            echo ready
+            i=0
+            while [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+            echo missed
+      - fixture:
+          file: relay.sh
+          content: |
+            embargo run sh app.sh "$1" > out.txt 2> err.txt &
+            pid=$!
+            until grep -q ready out.txt 2>/dev/null; do sleep 0.1; done
+            kill -"$1" "$pid"
+            wait "$pid"
+            echo "status $?"
+            cat out.txt err.txt
+      - run:
+          command: sh relay.sh ${signal}
+          timeout: 30s
+      - assert:
+          exit_code: 0
+          stdout:
+            equals: "status 0\nready\ngot ${signal} [REDACTED]\n"
 
   - name: run with a closed output ends quietly with 141
     steps:
