@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES = [
     ('mask-range', 'mask.go', 'f.End <= f.Start', 'f.End < f.Start'),
     ('json-depth', 'json.go', 'depth > maxDepth', 'depth >= maxDepth'),
-    ('json-space', 'json.go', 'for w.pos < len(w.data) {', 'for w.pos >= len(w.data) {'),
-    ('json-scalar', 'json.go', "hidden := masked != text", "hidden := masked == text"),
+    ('json-space', 'json.go', 'for w.pos < len(w.data) {\n\t\tswitch w.data[w.pos] {', 'for w.pos >= len(w.data) {\n\t\tswitch w.data[w.pos] {'),
+    ('json-scalar', 'json.go', 'if hidden {\n\t\tw.appendString(masked)', 'if !hidden {\n\t\tw.appendString(masked)'),
     ('json-escaped', 'json.go', "bytes.IndexByte(raw, '\\\\') >= 0", "bytes.IndexByte(raw, '\\\\') < 0"),
     ('json-unmarshal', 'json.go', 'if err := json.Unmarshal(raw, &text); err != nil {', 'if err := json.Unmarshal(raw, &text); err == nil {'),
     ('recorder-empty', 'embargotest/recorder.go', 'len(r.sinks) > 0 && len(r.expectations) > 0', 'len(r.sinks) >= 0 && len(r.expectations) > 0'),
