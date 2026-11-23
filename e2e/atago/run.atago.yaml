@@ -201,6 +201,41 @@ scenarios:
             path: out.txt
             equals: "started\nstopping [REDACTED]\n"
 
+  - name: without a terminal SIG${signal} sent to embargo reaches the command, as a container runtime sends it
+    skip:
+      os: windows
+    matrix:
+      - signal: INT
+      - signal: QUIT
+      - signal: USR1
+      - signal: USR2
+    steps:
+      - fixture:
+          file: app.sh
+          content: |
+            trap 'echo "got $1 alice@example.com"; exit 0' "$1"
+            echo ready
+            i=0
+            while [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+            echo missed
+      - fixture:
+          file: relay.sh
+          content: |
+            embargo run sh app.sh "$1" > out.txt 2> err.txt &
+            pid=$!
+            until grep -q ready out.txt 2>/dev/null; do sleep 0.1; done
+            kill -"$1" "$pid"
+            wait "$pid"
+            echo "status $?"
+            cat out.txt err.txt
+      - run:
+          command: sh relay.sh ${signal}
+          timeout: 30s
+      - assert:
+          exit_code: 0
+          stdout:
+            equals: "status 0\nready\ngot ${signal} [REDACTED]\n"
+
   - name: run with a closed output ends quietly with 141
     steps:
       - run:

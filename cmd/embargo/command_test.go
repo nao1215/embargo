@@ -51,6 +51,9 @@ func child(mode string) int {
 	case "wait":
 		return waitForSignal()
 	default:
+		if code, ok := platformChild(mode); ok {
+			return code
+		}
 		return 0
 	}
 }
@@ -107,7 +110,7 @@ func TestRunReportsASignalAsAShellDoes(t *testing.T) {
 	}
 }
 
-func TestRelaySignalsPassesTermButNotInterrupt(t *testing.T) {
+func TestRelaySignalsPassesTermButNotATerminalInterrupt(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows has no signals")
@@ -121,7 +124,7 @@ func TestRelaySignalsPassesTermButNotInterrupt(t *testing.T) {
 	signals <- os.Interrupt
 	signals <- syscall.SIGTERM
 	close(signals)
-	relaySignals(waiting.Process, signals)
+	relaySignals(waiting.Process, signals, func() bool { return true })
 	exit, ok := errors.AsType[*exec.ExitError](waiting.Wait())
 	if !ok {
 		t.Fatal("the child was not ended by a signal")
