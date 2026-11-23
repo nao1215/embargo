@@ -98,7 +98,7 @@ scenarios:
               out.txt:0
               err.txt:0
 
-  - name: an over-long line from the command is reported after it ends
+  - name: an over-long line from the command is withheld and the command keeps running
     steps:
       - fixture:
           file: long.sh
@@ -106,6 +106,7 @@ scenarios:
             echo first alice@example.com
             head -c 4194304 /dev/zero | tr '\000' a
             echo
+            echo after alice@example.com || exit 9
             exit "$1"
       - run:
           command: embargo run sh long.sh 0
@@ -114,15 +115,18 @@ scenarios:
           stdout:
             equals: |
               first [REDACTED]
+              embargo: line 2 exceeds the 4 MiB limit and was withheld
+              after [REDACTED]
           stderr:
             equals: |
-              embargo: line 2 exceeds the 4 MiB limit; output stops before it
+              embargo: line 2 exceeds the 4 MiB limit and was withheld
       - run:
           command: embargo run sh long.sh 3
       - assert:
-          exit_code: {in: [3, 141]}
+          exit_code: 3
           stderr:
-            contains: "embargo: line 2 exceeds the 4 MiB limit"
+            equals: |
+              embargo: line 2 exceeds the 4 MiB limit and was withheld
 
   - name: commands that cannot start get 126 and 127
     steps:

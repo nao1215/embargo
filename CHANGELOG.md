@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `embargo run` no longer ends the command with a broken pipe when it prints a line over 4 MiB: the line is replaced with a notice that names only its number and the command keeps running.
+
 ## [0.20.1] - 2026-11-20
 
 ### Changed

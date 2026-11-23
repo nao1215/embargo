@@ -18,6 +18,10 @@ const (
 	ioBuffer    = 64 << 10
 )
 
+// outputStops is the consequence of a failed read for output written line by
+// line: nothing after the failed line is written.
+const outputStops = "output stops before it"
+
 // errOutputClosed reports that the reader of the output has gone, as when the
 // output is piped into head; it ends the command quietly with status 141.
 var errOutputClosed = errors.New("embargo: output closed")
@@ -37,7 +41,7 @@ func writeFailed(err error) error {
 // failure is written, and the error names only the line number.
 func filterLines(input io.Reader, output io.Writer, lines *lineScanner) error {
 	writer := bufio.NewWriterSize(output, ioBuffer)
-	masked := &pipeline{base: lines, render: renderMasked, consequence: "output stops before it", lines: 0, size: 0}
+	masked := &pipeline{base: lines, render: renderMasked, consequence: outputStops, withhold: false, lines: 0, size: 0}
 	return masked.run(input, func(b *batch) error { return writeBatch(writer, b) })
 }
 
@@ -78,12 +82,14 @@ func readFailure(tooLong bool, readErr error, number int, consequence string) er
 
 // readLine returns one line including its newline, or the final unterminated
 // bytes with io.EOF. It reports tooLong instead of returning a line longer than
-// maximumLine.
+// maximumLine; err then tells how the bytes read so far ended:
+// bufio.ErrBufferFull while the rest of the line is still unread, nil after
+// its newline and io.EOF at the end of the input.
 func readLine(reader *bufio.Reader) (line []byte, tooLong bool, err error) {
 	for {
 		chunk, readErr := reader.ReadSlice('\n')
 		if len(line)+len(chunk) > maximumLine {
-			return nil, true, nil
+			return nil, true, readErr
 		}
 		if !errors.Is(readErr, bufio.ErrBufferFull) {
 			if line == nil {

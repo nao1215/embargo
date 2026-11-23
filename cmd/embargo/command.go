@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -157,6 +159,21 @@ func (p *commandPipes) close() {
 	}
 }
 
+// filterCommandOutput masks one stream of the command as filterLines does,
+// except that a line over the limit is replaced with a notice naming only its
+// number and the stream goes on, so the command is not ended by a closed pipe
+// because of one long line. The first withheld line is returned at the end.
+func filterCommandOutput(input io.Reader, output io.Writer, lines *lineScanner) error {
+	writer := bufio.NewWriterSize(output, ioBuffer)
+	masked := &pipeline{base: lines, render: renderMasked, consequence: outputStops, withhold: true, lines: 0, size: 0}
+	var withheld error
+	err := masked.run(input, func(b *batch) error {
+		withheld = cmp.Or(withheld, b.withheld)
+		return writeBatch(writer, b)
+	})
+	return cmp.Or(err, withheld)
+}
+
 // mask filters both streams at once and returns their failures. A stream
 // that stops early is closed, so the command gets a broken pipe instead of
 // blocking on a pipe nobody reads.
@@ -165,7 +182,7 @@ func (p *commandPipes) mask(scanner *embargo.Scanner, output, diagnostics io.Wri
 	var group sync.WaitGroup
 	for i, destination := range []io.Writer{output, diagnostics} {
 		group.Go(func() {
-			failures[i] = filterLines(p.read[i], destination, newLineScanner(scanner, inputLines))
+			failures[i] = filterCommandOutput(p.read[i], destination, newLineScanner(scanner, inputLines))
 			_ = p.read[i].Close() //nolint:errcheck // The stream was read to its end or abandoned.
 		})
 	}

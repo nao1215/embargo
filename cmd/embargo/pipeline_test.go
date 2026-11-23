@@ -137,7 +137,7 @@ func TestFillCutsABatchAtTheBatchSize(t *testing.T) {
 	t.Parallel()
 	line := strings.Repeat("f", 99) + "\n"
 	text := strings.Repeat(line, batchBytes/len(line)) + strings.Repeat("g", batchBytes%len(line)-1) + "\n" + "next\n"
-	p := &pipeline{base: newLineScanner(embargo.NewScanner(), inputLines), render: renderMasked, consequence: "", lines: 0, size: 0}
+	p := &pipeline{base: newLineScanner(embargo.NewScanner(), inputLines), render: renderMasked, consequence: "", withhold: false, lines: 0, size: 0}
 	b := &batch{first: 1, done: make(chan struct{})}
 	if done := p.fill(bufio.NewReaderSize(strings.NewReader(text), readBuffer), b); done || len(b.data) != batchBytes || b.flush {
 		t.Fatalf("batch of %d bytes, done %v, flush %v; want %d", len(b.data), done, b.flush, batchBytes)
