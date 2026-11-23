@@ -244,16 +244,20 @@ func TestValueCacheKeepsATextSeenTwiceAtItsSlot(t *testing.T) {
 	if cache.lookup(text, 8) == nil || cache.lookup(text, 0) != nil || cache.lookup([]byte("status: rejected"), 8) != nil {
 		t.Fatal("the cache must match the text and its prefix")
 	}
+	// The length limits get a cache of their own: the seed is random, so the
+	// text at the limit lands on the slot of text above once in 1024 runs and
+	// would replace it before the slot checks below.
+	limits := newValueCache()
 	long := []byte(strings.Repeat("v", maxCachedValueBytes+1))
-	cache.store(long, 0, 0)
-	cache.store(long, 0, 0)
-	if cache.lookup(long, 0) != nil {
+	limits.store(long, 0, 0)
+	limits.store(long, 0, 0)
+	if limits.lookup(long, 0) != nil {
 		t.Fatal("a text over the length limit was kept")
 	}
 	edge := long[:maxCachedValueBytes]
-	cache.store(edge, 0, 0)
-	cache.store(edge, 0, 0)
-	if cache.lookup(edge, 0) == nil {
+	limits.store(edge, 0, 0)
+	limits.store(edge, 0, 0)
+	if limits.lookup(edge, 0) == nil {
 		t.Fatal("a text at the length limit was not kept")
 	}
 	// A second text at the same slot replaces the first only once it repeats.
