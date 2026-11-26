@@ -41,7 +41,7 @@ Documentation: https://nao1215.github.io/embargo/
 Requires Go 1.26.11 or later.
 
 ```sh
-go get github.com/nao1215/embargo@v0.20.1
+go get github.com/nao1215/embargo@v0.21.0
 ```
 
 <!-- example: example_test.go:ExampleNewSlogHandler_quickStart -->
@@ -201,7 +201,7 @@ func TestReadmeCheckOutput(t *testing.T) {
 The `embargo` command reads lines and writes them masked, with no network access.
 
 ```sh
-go install github.com/nao1215/embargo/cmd/embargo@v0.20.1
+go install github.com/nao1215/embargo/cmd/embargo@v0.21.0
 ```
 
 | Where | Command |
