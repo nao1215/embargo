@@ -2,6 +2,7 @@ package embargo
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"math/rand/v2"
@@ -349,15 +350,21 @@ func TestWithMaskFuncPanicMasksOnlyThatSpan(t *testing.T) {
 
 func TestWithMaskFuncReplacementIsEncodedByTheOutput(t *testing.T) {
 	t.Parallel()
+	// Go releases differ in whether U+FFFD is written escaped, so the decoded
+	// document is compared.
 	for replacement, want := range map[string]string{
-		"\xff":            `{"msg":"card \ufffd","n":1}`,
-		"a\"b\n{\"n\":2}": `{"msg":"card a\"b\n{\"n\":2}","n":1}`,
-		"":                `{"msg":"card ","n":1}`,
+		"\xff":            "card \uFFFD",
+		"a\"b\n{\"n\":2}": "card a\"b\n{\"n\":2}",
+		"":                "card ",
 	} {
 		scanner := NewScanner(WithKinds(KindPAN), WithMaskFunc(func(Kind, string) string { return replacement }))
 		got, err := scanner.MaskJSON([]byte(`{"msg":"card 4111111111111111","n":1}`))
-		if err != nil || string(got) != want {
-			t.Errorf("replacement %q: MaskJSON = %s, %v, want %s", replacement, got, err, want)
+		var decoded struct {
+			Msg string `json:"msg"`
+			N   int    `json:"n"`
+		}
+		if err != nil || json.Unmarshal(got, &decoded) != nil || decoded.Msg != want || decoded.N != 1 {
+			t.Errorf("replacement %q: MaskJSON = %s, %v, want msg %q and n 1", replacement, got, err, want)
 		}
 	}
 }
