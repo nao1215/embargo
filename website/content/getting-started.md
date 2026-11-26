@@ -200,7 +200,42 @@ logger.Info("checkout", "email", "alice@example.com", "card", "4532015112830366"
 // Output: {"level":"INFO","msg":"checkout","email":"[EMAIL]","card":"****0366","password":"[REDACTED]"}
 ```
 
-Values under sensitive keys, encoded text that decodes to a finding and withheld records still become `[REDACTED]`, and a replacement that contains the whole value falls back to it. For an application-specific pattern, implement `Detector` and pass it to `WithDetector`; it must return ranges inside its input with confidences from 0 to 1, and be safe for concurrent calls.
+Values under sensitive keys, encoded text that decodes to a finding and withheld records still become `[REDACTED]`, and a replacement that contains the whole value falls back to it. A panic in the callback makes only that span `[REDACTED]` and keeps the rest of the record.
+
+embargo has no built-in pseudonym function, but the same option pseudonymizes: return a keyed hash so records about one customer stay linkable while the value stays hidden. Keep the key in a secret store, since anyone holding it can confirm a guessed value. Passwords and other values under sensitive keys are never hashed into the output:
+
+<!-- example: example_test.go:ExampleWithMaskFunc_pseudonym -->
+```go
+next := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey {
+			return slog.Attr{}
+		}
+		return a
+	},
+})
+// Load the key from a secret store; whoever holds it can link pseudonyms
+// back to guessed values.
+key := []byte("example pseudonym key")
+pseudonym := func(kind embargo.Kind, value string) string {
+	mac := hmac.New(sha256.New, key)
+	if _, err := mac.Write([]byte(string(kind) + "\x00" + value)); err != nil {
+		panic(err) // hash.Hash writes never fail; a panic would mask only this span.
+	}
+	return string(kind) + ":" + hex.EncodeToString(mac.Sum(nil)[:6])
+}
+scanner := embargo.NewScanner(embargo.WithKinds(embargo.KindEmail), embargo.WithMaskFunc(pseudonym))
+logger := slog.New(embargo.NewSlogHandler(next, scanner))
+
+logger.Info("login", "user", "alice@example.com", "password", "hunter2")
+logger.Info("order", "note", "placed by alice@example.com")
+
+// Output:
+// {"level":"INFO","msg":"login","user":"email:b58cca13fe06","password":"[REDACTED]"}
+// {"level":"INFO","msg":"order","note":"placed by email:b58cca13fe06"}
+```
+
+For an application-specific pattern, implement `Detector` and pass it to `WithDetector`; it must return ranges inside its input with confidences from 0 to 1, and be safe for concurrent calls.
 
 ## Fail tests on leaks
 

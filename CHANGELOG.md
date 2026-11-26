@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- A `WithMaskFunc` callback that panics no longer withholds the whole record from the slog handler, MaskJSON, the HTTP handler or the adapters: only the span it was replacing becomes `[REDACTED]`, the rest of the record is written as before, and the panic value is discarded.
+- The `WithMaskFunc` godoc and the getting-started page show how to pseudonymize with a keyed hash the caller supplies; embargo adds no built-in pseudonym function, and values under sensitive keys stay `[REDACTED]`.
+
 ### Fixed
 
 - `embargo run` no longer ends the command with a broken pipe when it prints a line over 4 MiB: the line is replaced with a notice that names only its number and the command keeps running.

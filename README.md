@@ -162,7 +162,7 @@ fmt.Println(embargo.Mask(text, scanner.ScanString(text)))
 | [Overlapping matches](example_test.go) | `token=abcdef` with `abcd cdef` → `token=[REDACTED]` |
 <!-- masking:end -->
 
-`WithMaskFunc` applies the same replacement to log records, MaskJSON and the adapters. [Scanner options and custom replacements](https://nao1215.github.io/embargo/getting-started/#choose-what-is-detected)
+`WithMaskFunc` applies the same replacement to log records, MaskJSON and the adapters, so a keyed hash you supply can pseudonymize values. [Scanner options and custom replacements](https://nao1215.github.io/embargo/getting-started/#choose-what-is-detected)
 
 <!-- narrowing-line:start -->
 Pick the kinds you need: on 2.7 KB of log lines with no secret, `WithKinds(KindEmail)` returns in 0.10 µs because there is no `@` to inspect, while `WithAll()` takes 65 µs. [Per-detector benchmarks](doc/benchmarks.md)
@@ -257,7 +257,7 @@ Coverage 99.4% · mutation score 89.18% · 13 fuzz targets, 2208636 executions.
 ## Benchmarks
 
 <!-- speed-summary:start -->
-On the same five JSON slog events, embargo is 1.09 to 1.60 times faster than go-masker given the same email and card rules, and embargo's default scanner is 1.83 to 5.79 times faster than pii-shield's default policy. [Time per event](doc/comparison.md#time-and-allocations)
+On the same five JSON slog events, embargo is 1.06 to 1.47 times faster than go-masker given the same email and card rules, and embargo's default scanner is 2.06 to 6.21 times faster than pii-shield's default policy. [Time per event](doc/comparison.md#time-and-allocations)
 <!-- speed-summary:end -->
 
 <!-- benchmarks:start -->

@@ -3,6 +3,9 @@ package embargo_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -155,6 +158,36 @@ func ExampleWithMaskFunc() {
 	logger.Info("checkout", "email", "alice@example.com", "card", "4532015112830366", "password", "hunter2")
 
 	// Output: {"level":"INFO","msg":"checkout","email":"[EMAIL]","card":"****0366","password":"[REDACTED]"}
+}
+
+func ExampleWithMaskFunc_pseudonym() {
+	next := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})
+	// Load the key from a secret store; whoever holds it can link pseudonyms
+	// back to guessed values.
+	key := []byte("example pseudonym key")
+	pseudonym := func(kind embargo.Kind, value string) string {
+		mac := hmac.New(sha256.New, key)
+		if _, err := mac.Write([]byte(string(kind) + "\x00" + value)); err != nil {
+			panic(err) // hash.Hash writes never fail; a panic would mask only this span.
+		}
+		return string(kind) + ":" + hex.EncodeToString(mac.Sum(nil)[:6])
+	}
+	scanner := embargo.NewScanner(embargo.WithKinds(embargo.KindEmail), embargo.WithMaskFunc(pseudonym))
+	logger := slog.New(embargo.NewSlogHandler(next, scanner))
+
+	logger.Info("login", "user", "alice@example.com", "password", "hunter2")
+	logger.Info("order", "note", "placed by alice@example.com")
+
+	// Output:
+	// {"level":"INFO","msg":"login","user":"email:b58cca13fe06","password":"[REDACTED]"}
+	// {"level":"INFO","msg":"order","note":"placed by email:b58cca13fe06"}
 }
 
 func ExampleWithDetector() {

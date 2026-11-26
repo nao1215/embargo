@@ -27,7 +27,7 @@ The last row is a URL query that a redirect sends to the browser. No logging lib
 ## Speed
 
 <!-- speed-summary:start -->
-On the same five JSON slog events, embargo is 1.09 to 1.60 times faster than go-masker given the same email and card rules, and embargo's default scanner is 1.83 to 5.79 times faster than pii-shield's default policy. [Time per event](doc/comparison.md#time-and-allocations)
+On the same five JSON slog events, embargo is 1.06 to 1.47 times faster than go-masker given the same email and card rules, and embargo's default scanner is 2.06 to 6.21 times faster than pii-shield's default policy. [Time per event](doc/comparison.md#time-and-allocations)
 <!-- speed-summary:end -->
 
 ![Time per log event](doc/images/log-event-time.svg)

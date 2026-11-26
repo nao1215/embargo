@@ -2,14 +2,14 @@ goos: linux
 goarch: amd64
 pkg: github.com/nao1215/embargo/tests
 cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S          
-                   │   masq.txt   │             embargo.txt              │
-                   │    sec/op    │    sec/op     vs base                │
-Comparison/flat       3.212µ ± 1%   1.283µ ±  1%  -60.06% (p=0.000 n=10)
-Comparison/nested     5.218µ ± 1%   2.410µ ±  2%  -53.82% (p=0.000 n=10)
-Comparison/map        5.730µ ± 2%   3.201µ ± 16%  -44.14% (p=0.000 n=10)
-Comparison/clean     2874.0n ± 1%   842.4n ±  0%  -70.69% (p=0.000 n=10)
-Comparison/large50    64.27µ ± 2%   11.17µ ±  5%  -82.62% (p=0.000 n=10)
-geomean               7.076µ        2.476µ        -65.01%
+                   │   masq.txt    │             embargo.txt              │
+                   │    sec/op     │    sec/op     vs base                │
+Comparison/flat       9.295µ ±  3%   3.895µ ±  4%  -58.10% (p=0.000 n=10)
+Comparison/nested    16.985µ ±  1%   6.710µ ±  3%  -60.50% (p=0.000 n=10)
+Comparison/map       17.386µ ±  3%   9.370µ ±  1%  -46.11% (p=0.000 n=10)
+Comparison/clean      9.300µ ±  3%   2.666µ ± 11%  -71.34% (p=0.000 n=10)
+Comparison/large50   193.20µ ± 12%   30.79µ ± 11%  -84.06% (p=0.000 n=10)
+geomean               21.81µ         7.255µ        -66.73%
 
                    │   masq.txt    │                embargo.txt                │
                    │     B/op      │     B/op      vs base                     │
@@ -17,7 +17,7 @@ Comparison/flat         672.0 ± 0%       0.0 ± 0%  -100.00% (p=0.000 n=10)
 Comparison/nested      1784.0 ± 0%     250.0 ± 0%   -85.99% (p=0.000 n=10)
 Comparison/map         1744.0 ± 0%     522.0 ± 0%   -70.07% (p=0.000 n=10)
 Comparison/clean        792.0 ± 0%       0.0 ± 0%  -100.00% (p=0.000 n=10)
-Comparison/large50   12.409Ki ± 0%   4.001Ki ± 0%   -67.76% (p=0.000 n=10)
+Comparison/large50   12.410Ki ± 0%   4.002Ki ± 0%   -67.75% (p=0.000 n=10)
 geomean               1.796Ki                      ?                       ¹ ²
 ¹ summaries must be >0 to compute geomean
 ² ratios must be >0 to compute geomean

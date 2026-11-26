@@ -2,6 +2,8 @@ package embargo
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"math/rand/v2"
 	"reflect"
@@ -296,21 +298,75 @@ func TestWithMaskFuncFallsBackToMarker(t *testing.T) {
 	if err != nil || string(got) != `{"n":"[REDACTED]"}` {
 		t.Fatalf("a number only partly covered by a finding = %s, %v", got, err)
 	}
-	panicking := NewScanner(WithKinds(KindPAN), WithMaskFunc(func(Kind, string) string { panic("boom") }))
-	if got, err := panicking.MaskJSON([]byte(`{"msg":"card 4111111111111111"}`)); err == nil || got != nil {
-		t.Fatalf("a panicking replacement = %s, %v", got, err)
-	}
-	var out bytes.Buffer
-	slog.New(NewSlogHandler(slog.NewJSONHandler(&out, nil), panicking)).Info("card 4111111111111111")
-	if strings.Contains(out.String(), "4111") {
-		t.Fatalf("a panicking replacement leaked through slog: %q", out.String())
-	}
 	defer func() {
 		if recover() == nil {
 			t.Fatal("WithMaskFunc(nil) did not panic")
 		}
 	}()
 	WithMaskFunc(nil)
+}
+
+func TestWithMaskFuncPanicMasksOnlyThatSpan(t *testing.T) {
+	t.Parallel()
+	// The callback pseudonymizes email and panics on cards, so the email shows
+	// whether the rest of the record survived the panic.
+	pseudonym := func(kind Kind, value string) string {
+		if kind == KindPAN {
+			panic("card " + value)
+		}
+		return "user-1"
+	}
+	scanner := NewScanner(WithKinds(KindPAN, KindEmail), WithMaskFunc(pseudonym))
+	for input, want := range map[string]string{
+		`{"msg":"card 4111111111111111"}`:                 `{"msg":"card [REDACTED]"}`,
+		`{"msg":"paid 4111111111111111 by a@b.example"}`:  `{"msg":"paid [REDACTED] by user-1"}`,
+		`{"card":4111111111111111,"email":"a@b.example"}`: `{"card":"[REDACTED]","email":"user-1"}`,
+		`{"4111111111111111":"a@b.example"}`:              `{"[REDACTED]":"user-1"}`,
+	} {
+		got, err := scanner.MaskJSON([]byte(input))
+		if err != nil || string(got) != want {
+			t.Errorf("MaskJSON(%s) = %s, %v, want %s", input, got, err, want)
+		}
+	}
+
+	var out bytes.Buffer
+	slog.New(NewSlogHandler(slog.NewJSONHandler(&out, &slog.HandlerOptions{ReplaceAttr: withoutTime}), scanner)).Info("card 4111111111111111", "email", "a@b.example", "order", 7)
+	if want := `{"level":"INFO","msg":"card [REDACTED]","email":"user-1","order":7}` + "\n"; out.String() != want {
+		t.Fatalf("slog = %q, want %q", out.String(), want)
+	}
+
+	for name, replace := range map[string]func(Kind, string) string{
+		"panic(nil)":    func(Kind, string) string { panic(nil) }, //nolint:govet // Exercise panic(nil) under both runtime compatibility settings.
+		"error value":   func(_ Kind, value string) string { panic(errors.New(value)) },
+		"library panic": func(_ Kind, value string) string { return strings.Repeat(value, -len(value)) },
+	} {
+		scanner := NewScanner(WithKinds(KindPAN), WithMaskFunc(replace))
+		got, err := scanner.MaskJSON([]byte(`{"msg":"card 4111111111111111","n":1}`))
+		if err != nil || string(got) != `{"msg":"card [REDACTED]","n":1}` {
+			t.Errorf("%s: MaskJSON = %s, %v", name, got, err)
+		}
+	}
+}
+
+func TestWithMaskFuncReplacementIsEncodedByTheOutput(t *testing.T) {
+	t.Parallel()
+	// Go releases differ in whether U+FFFD is written escaped, so the decoded
+	// document is compared.
+	for replacement, want := range map[string]string{
+		"\xff":            "card \uFFFD",
+		"a\"b\n{\"n\":2}": "card a\"b\n{\"n\":2}",
+		"":                "card ",
+	} {
+		scanner := NewScanner(WithKinds(KindPAN), WithMaskFunc(func(Kind, string) string { return replacement }))
+		got, err := scanner.MaskJSON([]byte(`{"msg":"card 4111111111111111","n":1}`))
+		var decoded struct {
+			Msg string `json:"msg"`
+			N   int    `json:"n"`
+		}
+		if err != nil || json.Unmarshal(got, &decoded) != nil || decoded.Msg != want || decoded.N != 1 {
+			t.Errorf("replacement %q: MaskJSON = %s, %v, want msg %q and n 1", replacement, got, err, want)
+		}
+	}
 }
 
 func withoutTime(_ []string, a slog.Attr) slog.Attr {
