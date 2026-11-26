@@ -233,7 +233,9 @@ logger.Info("order", "note", "placed by alice@example.com")
 // Output:
 // {"level":"INFO","msg":"login","user":"email:b58cca13fe06","password":"[REDACTED]"}
 // {"level":"INFO","msg":"order","note":"placed by email:b58cca13fe06"}
-``` For an application-specific pattern, implement `Detector` and pass it to `WithDetector`; it must return ranges inside its input with confidences from 0 to 1, and be safe for concurrent calls.
+```
+
+For an application-specific pattern, implement `Detector` and pass it to `WithDetector`; it must return ranges inside its input with confidences from 0 to 1, and be safe for concurrent calls.
 
 ## Fail tests on leaks
 
