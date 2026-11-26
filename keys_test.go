@@ -171,6 +171,12 @@ func TestValueCacheHitMatchesScan(t *testing.T) {
 	cached, fresh := NewScanner(), NewScanner()
 	fresh.values = nil
 	pairs := [][2]string{{statusKey, acceptedValue}, {"ok", strconv.FormatBool(true)}, {"count", "17"}, {tokenKey, acceptedValue}, {statusKey, documentedEmail}, {"pan", "4111111111111111"}, {"", acceptedValue}, {statusKey, "YWxpY2VAZXhhbXBsZS5jb20="}, {statusKey, encodedCleanValue}}
+	// The seed is random, so two of these texts share a slot in about one run
+	// of thirty and the later one replaces the entry checked below; draw seeds
+	// until every text has a slot of its own.
+	for slotsCollide(cached.values, pairs) {
+		cached.values = newValueCache()
+	}
 	for range 3 {
 		for _, pair := range pairs {
 			hit := eventScanner{scanner: cached, remaining: maxScanBytes}
@@ -196,6 +202,24 @@ func TestValueCacheHitMatchesScan(t *testing.T) {
 	if NewScanner(WithDetector(&retainingDetector{})).values != nil {
 		t.Fatal("custom detectors may answer differently, so their scanner must not cache values")
 	}
+}
+
+// slotsCollide reports whether two of the "key: value" texts that maskScalar
+// caches for pairs fall on one slot of cache.
+func slotsCollide(cache *valueCache, pairs [][2]string) bool {
+	used := map[int]bool{}
+	for _, pair := range pairs {
+		text := pair[1]
+		if pair[0] != "" {
+			text = pair[0] + ": " + pair[1]
+		}
+		index, _ := cache.slot([]byte(text))
+		if used[index] {
+			return true
+		}
+		used[index] = true
+	}
+	return false
 }
 
 // encodedCleanValue is "hello world" in padded standard base64: printable
