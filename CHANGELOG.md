@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-26
+
 ### Changed
 
 - A `WithMaskFunc` callback that panics no longer withholds the whole record from the slog handler, MaskJSON, the HTTP handler or the adapters: only the span it was replacing becomes `[REDACTED]`, the rest of the record is written as before, and the panic value is discarded.
