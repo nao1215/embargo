@@ -94,11 +94,20 @@ func WithMinConfidence(threshold float64) ScannerOption {
 
 // WithMaskFunc replaces each detected span in log records, MaskJSON output and
 // adapters with replace(kind, value), as MaskFunc does for text, so a log can
-// keep, for example, the last four digits of a card. Values under sensitive keys,
-// encoded text and records withheld on failure still become [REDACTED], as does a
-// detected JSON number unless one finding covers all of it. A replacement that
-// contains the value also falls back to [REDACTED]. replace must be safe for
-// concurrent calls; a panic withholds the record. A nil callback panics.
+// keep, for example, the last four digits of a card, or a pseudonym such as a
+// keyed hash that links records about one customer without showing the value.
+// embargo provides no pseudonym function: the key and the format belong to the
+// caller. value is the original text of the merged span, not a decoded form, so
+// one address written with different escapes gets different replacements.
+// Values under sensitive keys, encoded text and records withheld on failure
+// still become [REDACTED], as does a detected JSON number unless one finding
+// covers all of it; a password is never hashed into the output. A replacement
+// that contains the value also falls back to [REDACTED], and a panic in replace
+// makes only that span [REDACTED] and keeps the rest of the record, discarding
+// the panic value. The output encodes what replace returns, so quotes, newlines
+// and invalid UTF-8 cannot break a JSON or text record. replace must be safe for
+// concurrent calls and must return: runtime.Goexit, blocking and logging through
+// the same scanner cannot be recovered. A nil callback panics.
 func WithMaskFunc(replace func(kind Kind, value string) string) ScannerOption {
 	if replace == nil {
 		panic("embargo: nil replacement")

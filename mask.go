@@ -29,12 +29,25 @@ func (s *Scanner) replacer() func(Kind, string) string {
 }
 
 // guardedReplace calls the WithMaskFunc callback and keeps its result only
-// when the result does not contain the value.
-func (s *Scanner) guardedReplace(kind Kind, value string) string {
-	if out := s.maskFunc(kind, value); !strings.Contains(out, value) {
-		return out
+// when the callback returns and the result does not contain the value. A
+// panic replaces only this span with the marker, so one failing replacement
+// does not withhold the rest of the record. The returned flag, not the
+// recovered value, decides, because panic(nil) can recover as nil; the panic
+// value is discarded because it may hold the value.
+func (s *Scanner) guardedReplace(kind Kind, value string) (out string) {
+	returned := false
+	defer func() {
+		if !returned {
+			_ = recover() //nolint:errcheck // Discard panic values, including panic(nil) compatibility mode.
+			out = redactionMarker
+		}
+	}()
+	out = s.maskFunc(kind, value)
+	returned = true
+	if strings.Contains(out, value) {
+		return redactionMarker
 	}
-	return redactionMarker
+	return out
 }
 
 // MaskFunc replaces each merged span with replace(kind, value), in input order.

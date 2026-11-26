@@ -52,7 +52,7 @@
     "symbols": [
       "embargo.WithMaskFunc"
     ],
-    "need": "A support team that must match a card or account to a customer keeps the last four digits in log records and MaskJSON output, while every other kind stays hidden.",
+    "need": "A support team that must match a card or account to a customer keeps the last four digits in log records and MaskJSON output, while every other kind stays hidden; an analytics team replaces each email with a keyed hash so records about one customer stay linkable.",
     "without": "Without it partial display worked only on text passed to MaskFunc, so a team that wanted it in logs would drop the slog handler and the adapters and lose their key and structure rules."
   },
   {

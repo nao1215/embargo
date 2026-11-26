@@ -1387,12 +1387,32 @@ func TestMaskFuncReachesEveryHook(t *testing.T) {
 	scanner := embargo.NewScanner(embargo.WithKinds(embargo.KindPAN), embargo.WithMaskFunc(func(_ embargo.Kind, value string) string {
 		return "****" + value[len(value)-4:]
 	}))
-	check := func(name string, raw []byte) {
+	maskFuncHooks(t, scanner, card, func(name string, raw []byte) {
 		t.Helper()
 		if bytes.Contains(raw, []byte(card)) || !bytes.Contains(raw, []byte(kept)) {
 			t.Errorf("%s did not keep only the last four digits: %q", name, raw)
 		}
-	}
+	})
+}
+
+func TestPanickingMaskFuncKeepsEveryHookRecord(t *testing.T) {
+	t.Parallel()
+	const card = "4111111111111111"
+	scanner := embargo.NewScanner(embargo.WithKinds(embargo.KindPAN), embargo.WithMaskFunc(func(_ embargo.Kind, value string) string {
+		panic("card " + value)
+	}))
+	maskFuncHooks(t, scanner, card, func(name string, raw []byte) {
+		t.Helper()
+		if bytes.Contains(raw, []byte("4111")) || !bytes.Contains(raw, []byte("[REDACTED]")) || bytes.Contains(raw, []byte("withheld")) {
+			t.Errorf("%s did not keep the record with only the card masked: %q", name, raw)
+		}
+	})
+}
+
+// maskFuncHooks writes card through every hook that masks with the scanner's
+// replacement and passes each hook's raw output to check.
+func maskFuncHooks(t *testing.T, scanner *embargo.Scanner, card string, check func(name string, raw []byte)) {
+	t.Helper()
 	for _, name := range []string{loggerSlog, loggerZap, loggerZerolog, loggerLogrus} {
 		check(name, loggerOutput(t, scanner, name, "note", "paid with "+card))
 		check(name+" number", loggerOutput(t, scanner, name, "card", int64(4111111111111111)))
